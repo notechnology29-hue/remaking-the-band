@@ -1,0 +1,48 @@
+:root {
+  /* Color — backstage charcoal + stage-light magenta, not a generic near-black/violet default */
+  --color-bg: #17141a;
+  --color-surface: #221d26;
+  --color-surface-raised: #2b2430;
+  --color-ink: #f2ede9;
+  --color-ink-dim: #b8afb8;
+  --color-accent: #e23d6b;
+  --color-accent-soft: rgba(226, 61, 107, 0.18);
+  --color-warn: #f4b942;
+  --color-line: #3a3240;
+
+  /* Type — Anton for the poster-style wordmark (matches the show's own key art),
+     Inter for dense production-paperwork UI (call sheets, stat panels) */
+  --font-display: 'Anton', 'Arial Narrow', sans-serif;
+  --font-body: 'Inter', system-ui, -apple-system, sans-serif;
+
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-ink);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}
