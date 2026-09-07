@@ -1,5 +1,8 @@
 import { useEffect, useState } from 'react'
 import './App.css'
+import { masterScenarios } from './scenariosData'
+import { masterGearList, sidekickStoreCatalog } from './gearData'
+import { sidekickOpportunitiesCatalog } from './opportunitiesData'
 
 const ROWS = 5
 const COLS = 8
@@ -16,10 +19,10 @@ const roomCoordinates = {
 }
 
 const initialBandState = [
-  { id: 'ryan', name: 'Ryan Jolly', shortName: 'RJ', role: 'Lead', stamina: 10, stress: 86, trust: 48, passedOut: false, schedule: { morning: 'rest', noon: 'rest', night: 'rest' }, position: { row: 1, col: 1 }, color: 'coral', presence: 7 },
-  { id: 'bryn', name: 'Bryn Fretz', shortName: 'BF', role: 'Bass', stamina: 72, stress: 42, trust: 64, passedOut: false, schedule: { morning: 'rest', noon: 'rest', night: 'rest' }, position: { row: 3, col: 1 }, color: 'gold', presence: 6 },
-  { id: 'cable', name: 'Cable Cooley', shortName: 'CC', role: 'Guitar', stamina: 58, stress: 61, trust: 52, passedOut: false, schedule: { morning: 'rest', noon: 'rest', night: 'rest' }, position: { row: 0, col: 2 }, color: 'blue', presence: 8 },
-  { id: 'mikey', name: 'Mikey Stewert', shortName: 'MS', role: 'Drums', stamina: 80, stress: 34, trust: 67, passedOut: false, schedule: { morning: 'rest', noon: 'rest', night: 'rest' }, position: { row: 4, col: 2 }, color: 'mint', presence: 7 },
+  { id: 'ryan', name: 'Ryan Jolly', shortName: 'RJ', role: 'Lead Vocals', stamina: 10, stress: 86, trust: 48, passedOut: false, equippedGear: { vocalMic: 'ribbon_mic_44', monitor: null }, schedule: { morning: 'rest', noon: 'rest', night: 'rest' }, position: { row: 1, col: 1 }, color: 'coral', presence: 7 },
+  { id: 'bryn', name: 'Bryn Fretz', shortName: 'BF', role: 'Guitar', stamina: 72, stress: 42, trust: 64, passedOut: false, equippedGear: { amplifier: 'tube_amp_800', effects: 'fuzz_pedal_mk2' }, schedule: { morning: 'rest', noon: 'rest', night: 'rest' }, position: { row: 3, col: 1 }, color: 'gold', presence: 6 },
+  { id: 'cable', name: 'Cable Cooley', shortName: 'CC', role: 'Bass', stamina: 58, stress: 61, trust: 52, passedOut: false, equippedGear: { bassRig: 'tube_amp_800', preamp: 'fuzz_pedal_mk2' }, schedule: { morning: 'rest', noon: 'rest', night: 'rest' }, position: { row: 0, col: 2 }, color: 'blue', presence: 8 },
+  { id: 'mikey', name: 'Mikey Stewert', shortName: 'MS', role: 'Drums', stamina: 80, stress: 34, trust: 67, passedOut: false, equippedGear: { drumKit: null, hardware: null }, schedule: { morning: 'rest', noon: 'rest', night: 'rest' }, position: { row: 4, col: 2 }, color: 'mint', presence: 7 },
 ]
 
 function toCombatUnit(member) {
@@ -88,6 +91,13 @@ function App() {
   const [hostility, setHostility] = useState(STARTING_HOSTILITY)
   const [round, setRound] = useState(1)
   const [currentPhase, setCurrentPhase] = useState(PHASES.STUDIO)
+  const [currentWeek, setCurrentWeek] = useState(1)
+  const [playerMoney, setPlayerMoney] = useState(1200)
+  const [currentDayIndex, setCurrentDayIndex] = useState(0)
+  const [gearInventory, setGearInventory] = useState(masterGearList.map((gear) => ({ ...gear, condition: gear.id === 'tube_amp_800' ? 85 : gear.id === 'fuzz_pedal_mk2' ? 40 : gear.id === 'ribbon_mic_44' ? 95 : 100, maxDurability: 100 })))
+    const [equippedGear, setEquippedGear] = useState({ amplifier: 'tube_amp_800', effects: 'fuzz_pedal_mk2', microphone: 'ribbon_mic_44' })
+  const [unlockedGear, setUnlockedGear] = useState(masterGearList.map((gear) => ({ ...gear, condition: gear.id === 'tube_amp_800' ? 85 : gear.id === 'fuzz_pedal_mk2' ? 40 : gear.id === 'ribbon_mic_44' ? 95 : 100, maxDurability: 100 })))
+  const [studioUpgradeTier] = useState(3)
   const [episodeData, setEpisodeData] = useState({ songProgress: 0, hype: 0, drama: 0, editChoice: null, networkPayout: 0 })
   const [activeMenuTarget, setActiveMenuTarget] = useState(null)
   const [cameraTarget, setCameraTarget] = useState('auto')
@@ -124,14 +134,17 @@ function App() {
   function performAttack(attack) {
     if (!selectedUnit || availableAp < attack.cost || (attack.mp > 0 && availableMp < attack.mp) || hostility <= 0 || selectedUnit.passedOut) return
     const roll = Math.floor(Math.random() * 20) + 1
-    const modifier = selectedUnit.presence + Math.floor((selectedUnit.position.col + 1) / 2)
-    const damage = roll >= 15 ? 30 : roll >= 8 ? 15 : 5
+    const memberGearPenalty = getMemberGearModifiers(selectedUnit).reliabilityPenalty
+    const modifier = selectedUnit.presence + Math.floor((selectedUnit.position.col + 1) / 2) - memberGearPenalty
+    const effectiveRoll = Math.max(1, roll - memberGearPenalty)
+    const damage = effectiveRoll >= 15 ? 30 : effectiveRoll >= 8 ? 15 : 5
     const nextHostility = Math.max(0, hostility - damage)
     setApSpent((currentApSpent) => currentApSpent + attack.cost)
     setMpSpent((currentMpSpent) => currentMpSpent + attack.mp)
     setHostility(nextHostility)
-    setLastRoll({ attack: attack.name, roll, damage, modifier })
-    setLog(roll >= 15 ? `CRITICAL STUNT! ${selectedUnit.name} landed ${attack.name} with a d20 roll of ${roll}.` : roll >= 8 ? `Solid performance by ${selectedUnit.name}: d20 roll ${roll}.` : `BOTCHED STUNT! ${selectedUnit.name} fumbled ${attack.name} on a d20 roll of ${roll}.`)
+    applyGearWearAndTear(3)
+    setLastRoll({ attack: attack.name, roll: effectiveRoll, damage, modifier })
+    setLog(effectiveRoll >= 15 ? `CRITICAL STUNT! ${selectedUnit.name} landed ${attack.name} with a d20 roll of ${effectiveRoll}.` : effectiveRoll >= 8 ? `Solid performance by ${selectedUnit.name}: d20 roll ${effectiveRoll}.` : `BOTCHED STUNT! ${selectedUnit.name} fumbled ${attack.name} on a d20 roll of ${effectiveRoll}.`)
   }
 
   function endRound() {
@@ -141,12 +154,16 @@ function App() {
       return { ...member, stress, passedOut: member.passedOut || stress >= 100 }
     })
     setBandState(nextBand)
+    applyGearWearAndTear(5)
     setRound((currentRound) => currentRound + 1)
     setApSpent(0)
     setMpSpent(0)
     setLastRoll(null)
     setSelectedId(null)
     setLog('The crowd surges forward and raises stress across the band. AP and MP refresh.')
+    if (nextBand.every((member) => member.stamina <= 0 || member.stress >= 100)) {
+      handleCombatDefeat(nextBand, 'Every member passed out from exhaustion and stress.')
+    }
   }
 
   const isDefeated = hostility <= 0
@@ -158,6 +175,91 @@ function App() {
   const hype = Math.max(0, Math.round(averageTrust + averageStamina * 0.35))
   const drama = Math.max(0, Math.round(averageStress + bandState.filter((member) => member.passedOut).length * 20))
   const networkPayout = 400 + hype * 8 + drama * 3
+
+  function handleBuyOpportunity(opportunity) {
+    if (playerMoney < opportunity.cost) {
+      setNarrativeLog((current) => [{ id: Date.now(), timestamp: `Week ${currentWeek} / Economy`, text: `TRANSACTION FAILED: Insufficient funds for ${opportunity.name}.` }, ...current])
+      return
+    }
+    setPlayerMoney((money) => money - opportunity.cost)
+    setBandState((currentBand) => currentBand.map((member) => ({ ...member, trust: Math.max(0, Math.min(100, member.trust + (opportunity.effect.trustBonus || opportunity.effect.trustPenalty || 0))), stress: Math.max(0, Math.min(100, member.stress + (opportunity.effect.stressPenalty || 0))) })))
+    setEpisodeData((current) => ({ ...current, hype: current.hype + (opportunity.effect.hypeBonus || 0), drama: current.drama + (opportunity.effect.dramaBonus || 0) }))
+    setNarrativeLog((current) => [{ id: Date.now(), timestamp: `Week ${currentWeek} / Campaign`, text: `OPPORTUNITY SECURED: ${opportunity.name} purchased for $${opportunity.cost}.` }, ...current])
+  }
+
+  function handleBuyAndAssignGear(item) {
+    if (playerMoney < item.cost) {
+      setNarrativeLog((current) => [{ id: Date.now(), timestamp: `Week ${currentWeek} / Gear`, text: `TRANSACTION FAILED: Not enough funds to buy ${item.name}.` }, ...current])
+      return
+    }
+    const uniqueGearId = `${item.id}_${Date.now()}`
+    const newGearItem = { ...item, id: uniqueGearId, condition: 100, maxDurability: 100 }
+    masterGearList.push(newGearItem)
+    setPlayerMoney((money) => money - item.cost)
+    setGearInventory((inventory) => [...inventory, newGearItem])
+    setUnlockedGear((inventory) => [...inventory, newGearItem])
+    setBandState((currentBand) => currentBand.map((member) => member.role.toLowerCase() === item.role.toLowerCase() ? { ...member, equippedGear: { ...member.equippedGear, [item.slot]: uniqueGearId } } : member))
+    setNarrativeLog((current) => [{ id: Date.now(), timestamp: `Week ${currentWeek} / Gear`, text: `ACQUISITION: ${item.name} purchased and equipped for ${item.role} ($${item.cost}).` }, ...current])
+  }
+
+  const activeGear = Object.values(equippedGear).map((gearId) => gearInventory.find((gear) => gear.id === gearId)).filter((gear) => gear && gear.condition > 0)
+  const gearModifiers = activeGear.reduce((total, gear) => ({
+    hypeBonus: total.hypeBonus + (gear.modifier.hypeBonus || 0),
+    dramaBonus: total.dramaBonus + (gear.modifier.dramaBonus || 0),
+    stressPenalty: total.stressPenalty + (gear.modifier.stressPenalty || 0),
+    trustBonus: total.trustBonus + (gear.modifier.trustBonus || 0),
+  }), { hypeBonus: 0, dramaBonus: 0, stressPenalty: 0, trustBonus: 0 })
+
+  const stageGearReliabilityPenalty = activeGear.filter((gear) => gear.condition < 30).length * 3
+
+  function getMemberGearModifiers(member) {
+    return Object.values(member.equippedGear || {}).map((gearId) => gearInventory.find((gear) => gear.id === gearId)).filter((gear) => gear && gear.condition > 0).reduce((total, gear) => ({
+      hypeBonus: total.hypeBonus + (gear.modifier.hypeBonus || 0),
+      dramaBonus: total.dramaBonus + (gear.modifier.dramaBonus || 0),
+      stressPenalty: total.stressPenalty + (gear.modifier.stressPenalty || 0),
+      trustBonus: total.trustBonus + (gear.modifier.trustBonus || 0),
+      reliabilityPenalty: total.reliabilityPenalty + (gear.condition < 30 ? 3 : 0),
+    }), { hypeBonus: 0, dramaBonus: 0, stressPenalty: 0, trustBonus: 0, reliabilityPenalty: 0 })
+  }
+
+  function applyGearWearAndTear(wearAmount) {
+    const equippedIds = new Set(Object.values(equippedGear).filter(Boolean))
+    const brokenItems = gearInventory.filter((item) => equippedIds.has(item.id) && item.condition > 0 && item.condition - wearAmount <= 0)
+    setGearInventory((currentInventory) => currentInventory.map((item) => equippedIds.has(item.id) ? { ...item, condition: Math.max(0, item.condition - wearAmount) } : item))
+    setUnlockedGear((currentInventory) => currentInventory.map((item) => equippedIds.has(item.id) ? { ...item, condition: Math.max(0, item.condition - wearAmount) } : item))
+    if (brokenItems.length) {
+      setNarrativeLog((current) => [{ id: Date.now(), timestamp: `Week ${currentWeek} / Gear`, text: `GEAR FAILURE: ${brokenItems.map((item) => item.name).join(', ')} broke down completely under pressure.` }, ...current])
+    }
+  }
+
+  function handleCombatDefeat(penalizedRoster, reason = 'The band was crushed by the crowd during the Weekend Set Piece.') {
+    const resetRoster = penalizedRoster.map((member, index) => ({
+      ...member,
+      stamina: 20,
+      stress: 100,
+      trust: Math.max(0, member.trust - 25),
+      passedOut: true,
+      schedule: { morning: 'rest', noon: 'rest', night: 'rest' },
+      position: initialBandState[index]?.position || member.position,
+    }))
+    setBandState(resetRoster)
+    setNarrativeLog((current) => [{ id: Date.now(), timestamp: `Week ${currentWeek} - Finale`, text: `DEFEAT: ${reason} Trust shattered and stamina drained.` }, ...current])
+    setCurrentWeek((week) => week + 1)
+    setCurrentPhase(PHASES.STUDIO)
+    setCurrentSlot('morning')
+    setTimerSeconds(0)
+    setIsRiggingPhase(true)
+    setIsSimulationRunning(false)
+    setHiddenCameraRoom(null)
+    setActiveTextAlert(null)
+    setHostility(STARTING_HOSTILITY)
+    setRound(1)
+    setApSpent(0)
+    setMpSpent(0)
+    setSelectedId('ryan')
+    setLastRoll(null)
+    setStudioLog(`Week ${currentWeek + 1} begins after a catastrophic Weekend Stage defeat.`)
+  }
 
   function chooseAutonomousActivity(member) {
     if (member.passedOut || member.stamina <= 25) return 'rest'
@@ -181,19 +283,27 @@ function App() {
     setNarrativeLog((current) => [{ id: Date.now(), timestamp: 'Day 2 / Morning', text: 'The network issued an ultimatum after two quiet days.' }, ...current])
   }
 
+  function triggerRandomScenario() {
+    const scenario = masterScenarios[Math.floor(Math.random() * masterScenarios.length)]
+    setNarrativeLog((current) => [{ id: Date.now(), timestamp: `Week ${currentWeek} / ${currentSlot}`, text: `[${scenario.category.toUpperCase()}] ${scenario.description}` }, ...current])
+    setActiveTextAlert({ sender: `Network Exec / ${scenario.category}`, message: scenario.description, scenario, options: [{ label: `Push for Success: ${scenario.success}`, action: 'scenario_success' }, { label: `Risk Failure: ${scenario.failure}`, action: 'scenario_failure' }] })
+  }
+
   function advanceSimulationBlock() {
     const nextSlot = currentSlot === 'morning' ? 'noon' : currentSlot === 'noon' ? 'night' : 'morning'
     const nextBand = bandState.map((member) => {
       const activityKey = member.passedOut ? 'rest' : member.schedule[currentSlot]
       const impact = studioActivities[activityKey]
+      const memberGear = getMemberGearModifiers(member)
       const stamina = Math.max(0, Math.min(100, member.stamina + impact.stamina))
-      const stress = Math.max(0, Math.min(100, member.stress + impact.stress))
-      return { ...member, stamina, stress, trust: Math.max(0, Math.min(100, member.trust + impact.trust)), passedOut: stamina <= 0, schedule: { ...member.schedule, [nextSlot]: chooseAutonomousActivity({ ...member, stamina, stress }) } }
+      const stress = Math.max(0, Math.min(100, member.stress + impact.stress + memberGear.stressPenalty))
+      return { ...member, stamina, stress, trust: Math.max(0, Math.min(100, member.trust + impact.trust + memberGear.trustBonus)), passedOut: stamina <= 0, schedule: { ...member.schedule, [nextSlot]: chooseAutonomousActivity({ ...member, stamina, stress }) } }
     })
     setBandState(nextBand)
+    applyGearWearAndTear(4)
     const blockProgress = nextBand.reduce((total, member) => total + studioActivities[member.schedule[currentSlot]].progress, 0)
-    const blockHype = nextBand.reduce((total, member) => total + studioActivities[member.schedule[currentSlot]].hype, 0)
-    const blockDrama = nextBand.reduce((total, member) => total + studioActivities[member.schedule[currentSlot]].drama, 0)
+    const blockHype = nextBand.reduce((total, member) => total + studioActivities[member.schedule[currentSlot]].hype + getMemberGearModifiers(member).hypeBonus, 0)
+    const blockDrama = nextBand.reduce((total, member) => total + studioActivities[member.schedule[currentSlot]].drama + getMemberGearModifiers(member).dramaBonus, 0)
     const hiddenDrama = hiddenCameraRoom && nextBand.some((member) => roomForActivity(member.schedule[currentSlot]) === hiddenCameraRoom) ? 12 : 0
     setEpisodeData((current) => ({ ...current, songProgress: Math.min(100, current.songProgress + blockProgress), hype: Math.max(0, current.hype + blockHype), drama: Math.max(0, current.drama + blockDrama + hiddenDrama) }))
     const rivalTriggered = currentSlot === 'morning' && Math.random() > 0.5
@@ -205,6 +315,7 @@ function App() {
       setBoringDays(nextBoringDays)
       if (nextBoringDays >= 2) triggerNetworkUltimatum()
     }
+    if (!rivalTriggered && currentSlot !== 'noon' && Math.random() > 0.65) triggerRandomScenario()
     const stressedMember = [...nextBand].sort((a, b) => b.stress - a.stress)[0]
     if (!activeTextAlert && !rivalTriggered && currentSlot !== 'noon' && stressedMember && stressedMember.stress > 60 && lastNarrativeSlot !== currentSlot) {
       setActiveTextAlert({ sender: stressedMember.name, memberId: stressedMember.id, message: 'I cannot stand the pressure in this room anymore. Should I walk out or trash the gear?', options: [{ label: 'Talk them down (-Stress, +Trust)', action: 'calm' }, { label: 'Provoke them for cameras (+Drama, +Hype)', action: 'provoke' }] })
@@ -238,9 +349,10 @@ function App() {
     if (!activeTextAlert) return
     const { memberId, sender } = activeTextAlert
     const isCalm = ['calm', 'rival_ignore', 'argument_cut', 'ultimatum_pushback'].includes(action)
-    const isHype = ['provoke', 'rival_fire', 'argument_roll'].includes(action)
-    setBandState((currentBand) => currentBand.map((member) => member.id === memberId ? { ...member, stress: Math.max(0, Math.min(100, member.stress + (isCalm ? -20 : 20))), trust: Math.max(0, Math.min(100, member.trust + (isCalm ? 10 : -4))) } : member))
-    setEpisodeData((current) => ({ ...current, hype: Math.max(0, current.hype + (isHype ? 10 : 0)), drama: Math.max(0, current.drama + (isCalm ? 0 : 20)) }))
+    const isHype = ['provoke', 'rival_fire', 'argument_roll', 'scenario_success'].includes(action)
+    const scenarioSuccess = action === 'scenario_success'
+    setBandState((currentBand) => currentBand.map((member) => member.id === memberId ? { ...member, stamina: Math.max(0, Math.min(100, member.stamina + (scenarioSuccess ? 5 : 0))), stress: Math.max(0, Math.min(100, member.stress + (isCalm ? -20 : scenarioSuccess ? 0 : 20))), trust: Math.max(0, Math.min(100, member.trust + (isCalm ? 10 : scenarioSuccess ? 5 : -4))) } : member))
+    setEpisodeData((current) => ({ ...current, hype: Math.max(0, current.hype + (isHype ? 10 : 0)), drama: Math.max(0, current.drama + (isCalm || scenarioSuccess ? 0 : 20)) }))
     setNarrativeLog((current) => [{ id: Date.now(), timestamp: `Day 1 / ${currentSlot}`, text: `Resolved text from ${sender}: ${isCalm ? 'talked them down' : 'provoke for cameras'}.` }, ...current])
     setActiveTextAlert(null)
   }
@@ -249,6 +361,7 @@ function App() {
     if (isRiggingPhase) return
     if (currentSlot === 'night') {
       setCurrentSlot('morning')
+      setCurrentDayIndex((day) => Math.min(6, day + 1))
       setTimerSeconds(0)
       setHiddenCameraRoom(null)
       setIsRiggingPhase(true)
@@ -260,6 +373,10 @@ function App() {
   }
 
   function updateSchedule(memberId, slot, activity) {
+    if (slot === '__gear__') {
+      setBandState((currentBand) => currentBand.map((member) => member.id === memberId ? { ...member, equippedGear: { ...member.equippedGear, [activity.slot]: activity.gearId } } : member))
+      return
+    }
     setBandState((currentBand) => currentBand.map((member) => member.id === memberId ? { ...member, schedule: { ...member.schedule, [slot]: activity } } : member))
   }
 
@@ -296,8 +413,16 @@ function App() {
     setCurrentPhase(PHASES.RECAP)
   }
 
+  updateSchedule.playerMoney = playerMoney
+  updateSchedule.monitorData = { band: bandState, week: currentWeek, hype, drama, money: playerMoney }
+  updateSchedule.gearInventory = gearInventory
+  updateSchedule.handleBuyOpportunity = handleBuyOpportunity
+  handleBuyOpportunity.handleBuyAndAssignGear = handleBuyAndAssignGear
+  updateSchedule.handleBuyAndAssignGear = handleBuyAndAssignGear
+  setEquippedGear.monitorData = { band: bandState, week: currentWeek, hype, drama, money: playerMoney }
+
   if (currentPhase === PHASES.STUDIO) {
-    return <><StudioPhase band={bandState} currentSlot={currentSlot} timerSeconds={timerSeconds} isSimulationRunning={isSimulationRunning} setIsSimulationRunning={setIsSimulationRunning} isRiggingPhase={isRiggingPhase} setIsRiggingPhase={setIsRiggingPhase} hiddenCameraRoom={hiddenCameraRoom} setHiddenCameraRoom={setHiddenCameraRoom} onSkipTimeBlock={handleSkipTimeBlock} activeMenuTarget={activeMenuTarget} setActiveMenuTarget={setActiveMenuTarget} cameraTarget={cameraTarget} setCameraTarget={setCameraTarget} updateSchedule={updateSchedule} onExecute={executeStudioDay} log={studioLog} narrativeLog={narrativeLog} /><button className="floating-skip-time" onClick={handleSkipTimeBlock} disabled={isRiggingPhase || Boolean(activeTextAlert)}>Skip time <span>»</span></button>{hiddenCameraRoom && <BugMarker room={hiddenCameraRoom} />}{isRiggingPhase && <RiggingOverlay hiddenCameraRoom={hiddenCameraRoom} setHiddenCameraRoom={setHiddenCameraRoom} onStart={() => { setIsRiggingPhase(false); setTimerSeconds(0); setIsSimulationRunning(true) }} />}{activeTextAlert && <NarrativeAlert alert={activeTextAlert} onResolve={resolveNarrativeChoice} />}</>
+    return <><StudioPhase week={currentWeek} band={bandState} currentSlot={currentSlot} timerSeconds={timerSeconds} isSimulationRunning={isSimulationRunning} setIsSimulationRunning={setIsSimulationRunning} isRiggingPhase={isRiggingPhase} setIsRiggingPhase={setIsRiggingPhase} hiddenCameraRoom={hiddenCameraRoom} setHiddenCameraRoom={setHiddenCameraRoom} onSkipTimeBlock={handleSkipTimeBlock} activeMenuTarget={activeMenuTarget} setActiveMenuTarget={setActiveMenuTarget} cameraTarget={cameraTarget} setCameraTarget={setCameraTarget} updateSchedule={updateSchedule} onExecute={executeStudioDay} log={studioLog} narrativeLog={narrativeLog} /><div className="week-badge">WEEK {currentWeek}</div><GearPanel unlockedGear={unlockedGear} equippedGear={equippedGear} setEquippedGear={setEquippedGear} studioUpgradeTier={studioUpgradeTier} /><button className="floating-skip-time" onClick={handleSkipTimeBlock} disabled={isRiggingPhase || Boolean(activeTextAlert)}>Skip time <span>»</span></button>{hiddenCameraRoom && <BugMarker room={hiddenCameraRoom} />}{isRiggingPhase && <RiggingOverlay hiddenCameraRoom={hiddenCameraRoom} setHiddenCameraRoom={setHiddenCameraRoom} onStart={() => { setIsRiggingPhase(false); setTimerSeconds(0); setIsSimulationRunning(true) }} />}{activeTextAlert && <NarrativeAlert alert={activeTextAlert} onResolve={resolveNarrativeChoice} />}</>
   }
 
   if (currentPhase === PHASES.SPIN_ROOM) {
@@ -362,13 +487,24 @@ function BugMarker({ room }) {
   return <div className="bug-marker" style={markerPosition}>REC / BUGGED</div>
 }
 
+function GearPanel({ unlockedGear, equippedGear, setEquippedGear, studioUpgradeTier }) {
+  const slots = ['amplifier', 'effects', 'microphone']
+  return <><ProductionMonitor data={setEquippedGear.monitorData} /><aside className="gear-panel"><strong>GARAGE RIG / TIER {studioUpgradeTier}</strong>{slots.map((slot) => <label key={slot}><span>{slot}</span><select value={equippedGear[slot] || ''} onChange={(event) => setEquippedGear((current) => ({ ...current, [slot]: event.target.value || null }))}><option value="">Empty</option>{unlockedGear.map((gearRef) => { const gear = typeof gearRef === 'string' ? masterGearList.find((item) => item.id === gearRef) : gearRef; return gear?.slot === slot ? <option value={gear.id} key={gear.id}>{gear.name} ({gear.condition}%)</option> : null })}</select></label>)}</aside></>
+}
+
+function ProductionMonitor({ data }) {
+  if (!data) return null
+  return <section className="production-monitor"><header><strong>SHOWRUNNER_MONITOR_OS // LIVE FEED & METRICS</strong><span>FINANCIAL BAL: <b>${data.money}</b></span></header><div className="monitor-metrics"><span>NETWORK DRAMA <b>{data.drama}</b></span><span>PURIST HYPE <b>{data.hype}</b></span><span>WEEKLY CAMPAIGN <b>Week {data.week}</b></span></div><small>ROSTER TELEMETRY & STAT TRACKER</small><div className="monitor-roster">{data.band.map((member) => <article key={member.id}><strong>{member.name.toUpperCase()}</strong><span>STA {member.stamina}%</span><span>STR {member.stress}%</span><span>TRU {member.trust}%</span><em>{member.role}</em></article>)}</div></section>
+}
+
 function NarrativeAlert({ alert, onResolve }) {
   return <div className="narrative-overlay"><section className="narrative-modal"><strong className="lcd-title">MESSAGE FROM: {alert.sender.toUpperCase()}</strong><p>“{alert.message}”</p><div>{alert.options.map((option) => <button key={option.action} onClick={() => onResolve(option.action)}>→ {option.label}</button>)}</div></section></div>
 }
 
-function StudioPhase({ band, currentSlot, timerSeconds, isSimulationRunning, setIsSimulationRunning, isRiggingPhase, setIsRiggingPhase, hiddenCameraRoom, setHiddenCameraRoom, onSkipTimeBlock, activeMenuTarget, setActiveMenuTarget, cameraTarget, setCameraTarget, updateSchedule, onExecute, log, narrativeLog }) {
+function StudioPhase({ week, band, currentSlot, timerSeconds, isSimulationRunning, setIsSimulationRunning, isRiggingPhase, setIsRiggingPhase, hiddenCameraRoom, setHiddenCameraRoom, onSkipTimeBlock, activeMenuTarget, setActiveMenuTarget, cameraTarget, setCameraTarget, updateSchedule, onExecute, log, narrativeLog }) {
   const cameraMember = cameraTarget === 'auto' ? [...band].sort((a, b) => (b.stress - b.stamina) - (a.stress - a.stamina))[0] : band.find((member) => String(member.id) === String(cameraTarget))
-  const cameraPosition = cameraMember ? getStudioPosition(cameraMember, currentSlot, 0) : { x: 45, y: 45 }
+  const manualCameraRoom = cameraTarget.startsWith('room:') ? cameraTarget.slice(5) : null
+  const cameraPosition = manualCameraRoom ? roomCoordinates[manualCameraRoom] : cameraMember ? getStudioPosition(cameraMember, currentSlot, 0) : { x: 45, y: 45 }
   const progress = Math.round((timerSeconds / TIME_BLOCK_SECONDS) * 100)
   return <main className="compound-app"><header className="compound-header"><div className="brand-lockup"><span className="brand-kicker">Remaking the Band</span><span className="brand-title">SIDEKICK OS / STUDIO COMPOUND</span></div><div className="compound-day"><span>Current slot</span><strong>{currentSlot}</strong></div></header><section className="compound-intro"><div><p className="eyebrow">Fairwell · Studio Phase</p><h1>Watch them work.</h1><p>{log}</p></div><div className="simulation-controls"><div className="simulation-clock"><span>Block progress</span><strong>{progress}%</strong><i><b style={{ width: `${progress}%` }} /></i></div><button className="roll-studio" onClick={() => setIsSimulationRunning((running) => !running)}>{isSimulationRunning ? 'Pause simulation' : 'Resume simulation'} <span>{isSimulationRunning ? 'Ⅱ' : '▶'}</span></button></div></section><section className="compound-canvas" aria-label="Studio compound"><div className="compound-room kitchen-room"><span>01 / Kitchen</span><small>Rest & recovery</small></div><div className="compound-room tracking-room"><span>02 / Tracking Room</span><small>Woodshed & group jam</small></div><div className="compound-room loading-room"><span>03 / Loading Dock</span><small>Smoke break</small></div><div className="compound-room desk-room"><span>04 / Producer Desk</span><small>Network pressure</small></div>{band.map((member, index) => { const position = getStudioPosition(member, currentSlot, index); return <button key={member.id} className={`compound-sprite ${member.color} ${activeMenuTarget === member.id ? 'sprite-selected' : ''}`} style={{ left: `${position.x}%`, top: `${position.y}%` }} onClick={() => setActiveMenuTarget(member.id)}><strong>{member.shortName}</strong><small>{member.name.split(' ')[0]}</small>{member.passedOut && <b>OUT</b>}</button> })}<button className={`camera-crew ${activeMenuTarget === 'camera' ? 'camera-selected' : ''}`} style={{ left: `${cameraPosition.x + 5}%`, top: `${cameraPosition.y - 5}%` }} onClick={() => setActiveMenuTarget('camera')}><strong>CAM</strong><small>crew</small></button></section><p className="compound-hint"><span>Autonomous compound</span> sprites move on the {currentSlot} clock. Tap one to open the Sidekick; the camera crew follows {cameraMember?.name || 'the room'}.</p>{activeMenuTarget && <SidekickUI activeMenuTarget={activeMenuTarget} band={band} cameraTarget={cameraTarget} setCameraTarget={setCameraTarget} updateSchedule={updateSchedule} closePhone={() => setActiveMenuTarget(null)} narrativeLog={narrativeLog} />}</main>
 }
@@ -381,10 +517,54 @@ function getStudioPosition(member, currentSlot, index) {
 }
 
 function SidekickUI({ activeMenuTarget, band, cameraTarget, setCameraTarget, updateSchedule, closePhone, narrativeLog }) {
-  return <SidekickPhone activeMenuTarget={activeMenuTarget} band={band} cameraTarget={cameraTarget} setCameraTarget={setCameraTarget} updateSchedule={updateSchedule} closePhone={closePhone} narrativeLog={narrativeLog} />
+  return <CompleteSidekickPhone activeMenuTarget={activeMenuTarget} band={band} cameraTarget={cameraTarget} setCameraTarget={setCameraTarget} updateSchedule={updateSchedule} closePhone={closePhone} narrativeLog={narrativeLog} />
   /* Legacy phone markup retained below as a reference while the LCD view is iterated. */
   const targetMember = band.find((member) => member.id === activeMenuTarget)
   return <aside className="sidekick-device"><div className="sidekick-header"><span>SIDEKICK OS v1.2</span><i /><span>BAT 84%</span></div><div className="sidekick-screen">{targetMember && <div><p className="phone-kicker">MEMBER CALL SHEET</p><h2>{targetMember.name}</h2><div className="phone-stats"><span>STA <b>{targetMember.stamina}%</b></span><span>STR <b>{targetMember.stress}%</b></span><span>TRU <b>{targetMember.trust}%</b></span></div><p className="phone-status-line">{toCombatUnit(targetMember).statusEffects.join(' · ') || 'Stable'} </p>{!targetMember.passedOut ? <div className="phone-schedule">{['morning', 'noon', 'night'].map((slot) => <label key={slot}><span>{slot}</span><select value={targetMember.schedule[slot]} onChange={(event) => updateSchedule(targetMember.id, slot, event.target.value)}>{Object.entries(studioActivities).map(([key, activity]) => <option value={key} key={key}>{activity.label}</option>)}</select></label>)}</div> : <p className="phone-warning">CHARACTER IS UNCONSCIOUS.<br />Locked in recovery.</p>}</div>}{activeMenuTarget === 'camera' && <div><p className="phone-kicker">PRODUCER CONTROLS</p><h2>Camera Crew</h2><p className="phone-copy">Choose what the network sees and who gets the close-up.</p><label className="phone-field"><span>Camera target</span><select value={cameraTarget} onChange={(event) => setCameraTarget(event.target.value)}><option value="auto">Auto-follow volatility</option>{band.map((member) => <option value={member.id} key={member.id}>{member.name}</option>)}<option value="off">Cut the feed</option></select></label><div className="phone-ratings"><span>HYPE <b>{Math.round(band.reduce((total, member) => total + member.trust, 0) / band.length)}</b></span><span>DRAMA <b>{Math.round(band.reduce((total, member) => total + member.stress, 0) / band.length)}</b></span></div></div>}<div className="sidekick-home"><button onClick={closePhone}>MENU</button><button onClick={closePhone}>BACK</button><button onClick={closePhone}>CLOSE</button></div></div></aside>
+}
+
+function CompleteSidekickPhone({ activeMenuTarget, band, cameraTarget, setCameraTarget, updateSchedule, closePhone, narrativeLog }) {
+  const [tab, setTab] = useState('monitor')
+  const data = updateSchedule.monitorData || { band, week: 1, hype: 0, drama: 0, money: updateSchedule.playerMoney || 0 }
+  const availableGear = updateSchedule.gearInventory || masterGearList
+  const tabs = [['monitor', 'HOME'], ['routes', 'ROUTES'], ['gear', 'GEAR'], ['opps', 'STORE'], ['story', 'STORY']]
+  return <aside className="sidekick-device"><div className="sidekick-header"><span>SIDEKICK OS v1.2</span><i /><span>${data.money}</span></div><div className="sidekick-tabs">{tabs.map(([id, label]) => <button className={tab === id ? 'active' : ''} onClick={() => setTab(id)} key={id}>{label}</button>)}</div><div className="sidekick-lcd">{tab === 'monitor' && <MonitorLCD data={data} />}{tab === 'opps' && <OpportunityView money={data.money} onBuy={updateSchedule.handleBuyOpportunity} />}{tab === 'story' && <div className="story-tab-panel"><strong className="lcd-title">EPISODE ARCHIVE</strong>{narrativeLog.map((entry) => <article key={entry.id}><span>{entry.timestamp || 'Reality Feed'}</span><p>{entry.text}</p></article>)}</div>}{tab === 'routes' && <div><strong className="lcd-title">COMPOUND ROUTES</strong><select className="lcd-select" value={cameraTarget} onChange={(event) => setCameraTarget(event.target.value)}><option value="auto">Auto-follow drama</option><option value="room:kitchen">Kitchen</option><option value="room:tracking">Tracking Room</option><option value="room:loading">Loading Dock</option><option value="room:desk">Producer Desk</option>{band.map((member) => <option value={member.id} key={member.id}>Follow {member.name}</option>)}</select>{band.map((member) => <article className="route-member" key={member.id}><strong>{member.name}</strong><div>{Object.entries({ kitchen: 'rest', tracking: 'groupJam', loading: 'smoke', desk: 'drink' }).map(([room, activity]) => <button key={room} onClick={() => updateSchedule(member.id, 'morning', activity)}>{room}</button>)}</div></article>)}</div>}{tab === 'gear' && <div><strong className="lcd-title">PERSONAL LOADOUTS</strong>{band.map((member) => <article className="member-loadout" key={member.id}><strong>{member.name}</strong>{Object.entries(member.equippedGear || {}).map(([slot, gearId]) => <label key={slot}><span>{slot}</span><select value={gearId || ''} onChange={(event) => updateSchedule(member.id, '__gear__', { slot, gearId: event.target.value || null })}><option value="">None</option>{masterGearList.filter((gear) => gear.slot === slot).map((gear) => <option value={gear.id} key={gear.id}>{gear.name}</option>)}</select></label>)}</article>)}</div>}{tab === 'store' && <div><strong className="lcd-title">FIELD GEAR STORE</strong>{masterGearList.map((gear) => <article className="gear-store-item" key={gear.id}><strong>{gear.name}</strong><span>{gear.description}</span></article>)}</div>}<div className="sidekick-keypad"><button className="sidekick-btn" onClick={() => setTab('monitor')}>HOME</button><button className="sidekick-btn" onClick={() => setTab('monitor')}>BACK</button><button className="sidekick-btn close-btn" onClick={closePhone}>CLOSE X</button></div></div></aside>
+}
+
+function HomeSidekickPhone({ activeMenuTarget, band, cameraTarget, setCameraTarget, updateSchedule, closePhone, narrativeLog }) {
+  const data = updateSchedule.monitorData || { band, week: 1, hype: 0, drama: 0, money: updateSchedule.playerMoney || 0 }
+  const [tab, setTab] = useState('home')
+  return <aside className="sidekick-device"><div className="sidekick-header"><span>SIDEKICK OS v1.2</span><i /><span>${data.money}</span></div><div className="sidekick-tabs"><button className={tab === 'home' ? 'active' : ''} onClick={() => setTab('home')}>HOME</button><button className={tab === 'opps' ? 'active' : ''} onClick={() => setTab('opps')}>OPPS</button><button className={tab === 'story' ? 'active' : ''} onClick={() => setTab('story')}>STORY</button></div><div className="sidekick-lcd">{tab === 'home' && <MonitorLCD data={data} />}{tab === 'opps' && <OpportunityView money={data.money} onBuy={updateSchedule.handleBuyOpportunity} />}{tab === 'story' && <div className="story-tab-panel"><strong className="lcd-title">EPISODE ARCHIVE</strong>{narrativeLog.map((entry) => <article key={entry.id}><span>{entry.timestamp || 'Reality Feed'}</span><p>{entry.text}</p></article>)}</div>}<div className="sidekick-keypad"><button className="sidekick-btn" onClick={() => setTab('home')}>HOME</button><button className="sidekick-btn" onClick={() => setTab('home')}>BACK</button><button className="sidekick-btn close-btn" onClick={closePhone}>CLOSE X</button></div></div></aside>
+}
+
+function MonitorLCD({ data }) {
+  return <div className="lcd-monitor"><strong className="lcd-title">SHOWRUNNER MONITOR</strong><div className="monitor-lcd-metrics"><span>FUNDS<b>${data.money}</b></span><span>DRAMA<b>{data.drama}</b></span><span>HYPE<b>{data.hype}</b></span><span>WEEK<b>{data.week}</b></span></div><p className="lcd-label">ROSTER TELEMETRY</p>{data.band.map((member) => <article key={member.id}><strong>{member.name}</strong><span>STA {member.stamina}% · STR {member.stress}% · TRU {member.trust}%</span><small>{member.role}</small></article>)}</div>
+}
+
+function OpportunityView({ money, onBuy }) {
+  return <div><strong className="lcd-title">OPPORTUNITIES / ${money}</strong>{sidekickOpportunitiesCatalog.map((item) => <article className="gear-store-item" key={item.id}><strong>{item.name} · ${item.cost}</strong><span>{item.description}</span><button className="opp-buy" disabled={!onBuy || money < item.cost} onClick={() => onBuy(item)}>BOOK FEATURE</button></article>)}<strong className="lcd-title">MOBILE GEAR SHOP</strong>{sidekickStoreCatalog.map((item) => <article className="gear-store-item" key={item.id}><strong>{item.name} · ${item.cost}</strong><span>{item.role} / {item.slot}</span><small>{item.description}</small><button className="opp-buy" disabled={!onBuy?.handleBuyAndAssignGear || money < item.cost} onClick={() => onBuy.handleBuyAndAssignGear(item)}>BUY & EQUIP</button></article>)}</div>
+}
+
+function OpportunitySidekickPhone({ activeMenuTarget, band, cameraTarget, setCameraTarget, updateSchedule, closePhone, narrativeLog }) {
+  const [tab, setTab] = useState('opps')
+  const money = updateSchedule.playerMoney || 0
+  const buy = updateSchedule.handleBuyOpportunity
+  const monitorData = updateSchedule.monitorData || { band, week: 1, hype: 0, drama: 0, money }
+  return <aside className="sidekick-device"><div className="sidekick-header"><span>SIDEKICK OS v1.2</span><i /><span>${money}</span></div><div className="sidekick-tabs"><button className={tab === 'routes' ? 'active' : ''} onClick={() => setTab('routes')}>ROUTES</button><button className={tab === 'gear' ? 'active' : ''} onClick={() => setTab('gear')}>GEAR</button><button className={tab === 'opps' ? 'active' : ''} onClick={() => setTab('opps')}>OPPS</button><button className={tab === 'store' ? 'active' : ''} onClick={() => setTab('store')}>STORE</button><button className={tab === 'story' ? 'active' : ''} onClick={() => setTab('story')}>STORY</button></div><div className="sidekick-lcd">{tab === 'opps' && <div><strong className="lcd-title">OPPORTUNITIES / ${money}</strong>{sidekickOpportunitiesCatalog.map((item) => <article className="gear-store-item" key={item.id}><strong>{item.name} · ${item.cost}</strong><span>{item.description}</span><button className="opp-buy" disabled={money < item.cost} onClick={() => buy(item)}>BOOK FEATURE</button></article>)}</div>}{tab === 'story' && <div className="story-tab-panel"><strong className="lcd-title">EPISODE ARCHIVE</strong>{narrativeLog.map((entry) => <article key={entry.id}><span>{entry.timestamp || 'Reality Feed'}</span><p>{entry.text}</p></article>)}</div>}{tab === 'routes' && <div><strong className="lcd-title">COMPOUND ROUTES</strong>{activeMenuTarget === 'camera' ? <select className="lcd-select" value={cameraTarget} onChange={(event) => setCameraTarget(event.target.value)}><option value="auto">Auto-follow drama</option><option value="room:kitchen">Kitchen</option><option value="room:tracking">Tracking Room</option><option value="room:loading">Loading Dock</option><option value="room:desk">Producer Desk</option>{band.map((member) => <option value={member.id} key={member.id}>Follow {member.name}</option>)}</select> : band.map((member) => <article className="route-member" key={member.id}><strong>{member.name}</strong><div>{Object.entries({ kitchen: 'rest', tracking: 'groupJam', loading: 'smoke', desk: 'drink' }).map(([room, activity]) => <button key={room} onClick={() => updateSchedule(member.id, 'morning', activity)}>{room}</button>)}</div></article>)}</div>}{tab === 'gear' && <div><strong className="lcd-title">PERSONAL LOADOUTS</strong>{band.map((member) => <article className="member-loadout" key={member.id}><strong>{member.name}</strong>{Object.entries(member.equippedGear || {}).map(([slot, gearId]) => <label key={slot}><span>{slot}</span><select value={gearId || ''} onChange={(event) => updateSchedule(member.id, '__gear__', { slot, gearId: event.target.value || null })}><option value="">None</option>{masterGearList.filter((gear) => gear.slot === slot).map((gear) => <option value={gear.id} key={gear.id}>{gear.name}</option>)}</select></label>)}</article>)}</div>}{tab === 'store' && <div><strong className="lcd-title">FIELD GEAR STORE</strong>{masterGearList.map((gear) => <article className="gear-store-item" key={gear.id}><strong>{gear.name}</strong><span>{gear.description}</span></article>)}</div>}<div className="sidekick-keypad"><button className="sidekick-btn" onClick={() => setTab('opps')}>HOME</button><button className="sidekick-btn" onClick={() => setTab('opps')}>BACK</button><button className="sidekick-btn close-btn" onClick={closePhone}>CLOSE X</button></div></div></aside>
+}
+
+function LoadoutSidekickPhone({ activeMenuTarget, band, cameraTarget, setCameraTarget, updateSchedule, closePhone, narrativeLog }) {
+  const [activeSidekickTab, setActiveSidekickTab] = useState('gear')
+  const targetMember = band.find((member) => member.id === activeMenuTarget)
+  const gearForSlot = (slot) => masterGearList.filter((gear) => gear.slot === slot)
+  const tabs = [['monitor', 'HOME'], ['routes', 'ROUTES'], ['gear', 'LOADOUTS'], ['opps', 'OPPS'], ['store', 'STORE'], ['story', 'STORY']]
+  return <aside className="sidekick-device"><div className="sidekick-header"><span>SIDEKICK OS v1.2</span><i /><span>BAT 91%</span></div><div className="sidekick-tabs">{tabs.map(([id, label]) => <button className={activeSidekickTab === id ? 'active' : ''} onClick={() => setActiveSidekickTab(id)} key={id}>{label}</button>)}</div><div className="sidekick-lcd">{activeSidekickTab === 'routes' && <div><strong className="lcd-title">COMPOUND ROUTES</strong>{activeMenuTarget === 'camera' ? <div><p className="lcd-line">Send the camera crew directly to a room or follow the hottest story.</p><select className="lcd-select" value={cameraTarget} onChange={(event) => setCameraTarget(event.target.value)}><option value="auto">Auto-follow drama</option><option value="room:kitchen">Kitchen</option><option value="room:tracking">Tracking Room</option><option value="room:loading">Loading Dock</option><option value="room:desk">Producer Desk</option>{band.map((member) => <option value={member.id} key={member.id}>Follow {member.name}</option>)}<option value="off">Cut the feed</option></select></div> : <div>{band.map((member) => <article className="route-member" key={member.id}><strong>{member.name}</strong><small>{member.role}</small><div>{Object.entries({ kitchen: 'rest', tracking: 'groupJam', loading: 'smoke', desk: 'drink' }).map(([room, activity]) => <button className={member.schedule.morning === activity ? 'active' : ''} key={room} onClick={() => updateSchedule(member.id, 'morning', activity)}>{room}</button>)}</div></article>)}</div>}</div>}{activeSidekickTab === 'story' && <div className="story-tab-panel"><strong className="lcd-title">EPISODE ARCHIVE & DRAMA</strong>{narrativeLog.map((entry) => <article key={entry.id}><span>{entry.timestamp || 'Reality Feed'}</span><p>{entry.text}</p></article>)}</div>}{activeSidekickTab === 'store' && <div><strong className="lcd-title">FIELD GEAR STORE</strong>{masterGearList.map((gear) => <article className="gear-store-item" key={gear.id}><strong>{gear.name}</strong><span>{gear.slot} · {gear.description}</span><b>{gear.modifier.hypeBonus ? `+${gear.modifier.hypeBonus} hype` : gear.modifier.dramaBonus ? `+${gear.modifier.dramaBonus} drama` : 'reliability kit'}</b></article>)}</div>}{activeSidekickTab === 'gear' && <div><strong className="lcd-title">BAND GEAR LOADOUTS</strong>{band.map((member) => <article className="member-loadout" key={member.id}><strong>{member.name.toUpperCase()} <small>({member.role})</small></strong>{Object.entries(member.equippedGear || {}).map(([slot, currentGearId]) => <label key={slot}><span>{slot}</span><select value={currentGearId || ''} onChange={(event) => updateSchedule(member.id, '__gear__', { slot, gearId: event.target.value || null })}><option value="">None</option>{gearForSlot(slot).map((gear) => <option value={gear.id} key={gear.id}>{gear.name}</option>)}</select></label>)}</article>)}</div>}<div className="sidekick-keypad"><button className="sidekick-btn" onClick={() => setActiveSidekickTab('routes')}>HOME</button><button className="sidekick-btn" onClick={() => setActiveSidekickTab('routes')}>BACK</button><button className="sidekick-btn close-btn" onClick={closePhone}>CLOSE X</button></div></div></aside>
+}
+
+function PersonalSidekickPhone({ activeMenuTarget, band, cameraTarget, setCameraTarget, updateSchedule, closePhone, narrativeLog }) {
+  const [activeSidekickTab, setActiveSidekickTab] = useState('chat')
+  const targetMember = band.find((member) => member.id === activeMenuTarget)
+  return <aside className="sidekick-device"><div className="sidekick-header"><span>SIDEKICK OS v1.2</span><i /><span>BAT 91%</span></div><div className="sidekick-tabs"><button className={activeSidekickTab === 'chat' ? 'active' : ''} onClick={() => setActiveSidekickTab('chat')}>MESSAGES</button><button className={activeSidekickTab === 'story' ? 'active' : ''} onClick={() => setActiveSidekickTab('story')}>STORY LOG</button></div><div className="sidekick-lcd">{activeSidekickTab === 'story' ? <div className="story-tab-panel"><strong className="lcd-title">EPISODE ARCHIVE & DRAMA</strong>{narrativeLog.map((entry) => <article key={entry.id}><span>{entry.timestamp || 'Reality Feed'}</span><p>{entry.text}</p></article>)}</div> : targetMember ? <div><strong className="lcd-title">{targetMember.name.toUpperCase()}</strong><p className="lcd-line">{targetMember.role} · Stamina {targetMember.stamina}%</p><p className="lcd-line">Stress {targetMember.stress}% · Trust {targetMember.trust}%</p><div className="lcd-loadout"><p className="lcd-label">PERSONAL LOADOUT</p>{Object.entries(targetMember.equippedGear || {}).map(([slot, gearId]) => <div key={slot}><span>{slot}</span><b>{masterGearList.find((gear) => gear.id === gearId)?.name || 'None'}</b></div>)}</div><p className="lcd-label">CALL SHEET</p><div className="lcd-schedule">{['morning', 'noon', 'night'].map((slot) => <label key={slot}><span>{slot}</span><select value={targetMember.schedule[slot]} onChange={(event) => updateSchedule(targetMember.id, slot, event.target.value)}>{Object.entries(studioActivities).map(([key, activity]) => <option value={key} key={key}>{activity.label}</option>)}</select></label>)}</div></div> : <div><strong className="lcd-title">CAMERA CREW</strong><p className="lcd-line">Broadcast controls and volatility tracking.</p><select className="lcd-select" value={cameraTarget} onChange={(event) => setCameraTarget(event.target.value)}><option value="auto">Auto-follow drama</option>{band.map((member) => <option value={member.id} key={member.id}>{member.name}</option>)}<option value="off">Cut the feed</option></select></div>}<div className="sidekick-keypad"><button className="sidekick-btn" onClick={() => setActiveSidekickTab('chat')}>HOME</button><button className="sidekick-btn" onClick={() => setActiveSidekickTab('chat')}>BACK</button><button className="sidekick-btn close-btn" onClick={closePhone}>CLOSE X</button></div></div></aside>
 }
 
 function SidekickPhone({ activeMenuTarget, band, cameraTarget, setCameraTarget, updateSchedule, closePhone, narrativeLog }) {
