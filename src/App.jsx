@@ -91,6 +91,7 @@ function App() {
   const [hostility, setHostility] = useState(STARTING_HOSTILITY)
   const [round, setRound] = useState(1)
   const [currentPhase, setCurrentPhase] = useState(PHASES.STUDIO)
+  const [isGameStarted, setIsGameStarted] = useState(false)
   const [currentWeek, setCurrentWeek] = useState(1)
   const [playerMoney, setPlayerMoney] = useState(1200)
   const [currentDayIndex, setCurrentDayIndex] = useState(0)
@@ -421,6 +422,10 @@ function App() {
   updateSchedule.handleBuyAndAssignGear = handleBuyAndAssignGear
   setEquippedGear.monitorData = { band: bandState, week: currentWeek, hype, drama, money: playerMoney }
 
+  if (!isGameStarted) {
+    return <BootScreen onStart={() => setIsGameStarted(true)} />
+  }
+
   if (currentPhase === PHASES.STUDIO) {
     return <><StudioPhase week={currentWeek} band={bandState} currentSlot={currentSlot} timerSeconds={timerSeconds} isSimulationRunning={isSimulationRunning} setIsSimulationRunning={setIsSimulationRunning} isRiggingPhase={isRiggingPhase} setIsRiggingPhase={setIsRiggingPhase} hiddenCameraRoom={hiddenCameraRoom} setHiddenCameraRoom={setHiddenCameraRoom} onSkipTimeBlock={handleSkipTimeBlock} activeMenuTarget={activeMenuTarget} setActiveMenuTarget={setActiveMenuTarget} cameraTarget={cameraTarget} setCameraTarget={setCameraTarget} updateSchedule={updateSchedule} onExecute={executeStudioDay} log={studioLog} narrativeLog={narrativeLog} /><div className="week-badge">WEEK {currentWeek}</div><GearPanel unlockedGear={unlockedGear} equippedGear={equippedGear} setEquippedGear={setEquippedGear} studioUpgradeTier={studioUpgradeTier} /><button className="floating-skip-time" onClick={handleSkipTimeBlock} disabled={isRiggingPhase || Boolean(activeTextAlert)}>Skip time <span>»</span></button>{hiddenCameraRoom && <BugMarker room={hiddenCameraRoom} />}{isRiggingPhase && <RiggingOverlay hiddenCameraRoom={hiddenCameraRoom} setHiddenCameraRoom={setHiddenCameraRoom} onStart={() => { setIsRiggingPhase(false); setTimerSeconds(0); setIsSimulationRunning(true) }} />}{activeTextAlert && <NarrativeAlert alert={activeTextAlert} onResolve={resolveNarrativeChoice} />}</>
   }
@@ -472,6 +477,10 @@ function App() {
       </main>
     </DeviceShell>
   )
+}
+
+function BootScreen({ onStart }) {
+  return <main className="boot-screen"><section className="boot-terminal"><h1>REMAKING THE BAND</h1><p className="boot-version">Showrunner Edition v1.2 // Network Access Terminal</p><div className="boot-directive"><strong>OPERATIONAL DIRECTIVE:</strong><ul><li>Manage stamina, stress, and gear loadouts for Ryan, Bryn, Cable, and Mikey.</li><li>Direct camera crews and manipulate reality-TV edits.</li><li>Survive the network's demands and reach the Weekend Stage.</li></ul></div><button className="boot-button" onClick={onStart}>▶ INITIALIZE BROADCAST FEED</button></section></main>
 }
 
 function DeviceShell({ phase, alert, children }) {
